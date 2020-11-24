@@ -4,8 +4,8 @@
 #include "MMPU6050.h"
 #include "Step.h"
 
-#define KP 20
-#define KI 1
+#define KP 50
+#define KI 1.5
 #define KD 0
 #define NOISE 2 //+-2mm/s
 #define COMMAND_PORT Serial1
@@ -58,11 +58,6 @@ float CalcuPID(float dt_, float error_, float set_point_)
 
 float PID(float _dt, float _feedback, float _setpoint)
 {
-	// if ((_feedback - _setpoint) <= 0.01 && (_setpoint - _feedback) <= 0.01)
-	// {
-	// 	PIDout = 0;
-	// 	return PIDout;
-	// }
 	error = _setpoint - _feedback;
 	alpha = 2 * dt * Kp + Ki * dt * dt + 2 * Kd;
 	beta = Ki * dt * dt - 4 * Kd - 2 * dt * Kp;
@@ -157,6 +152,7 @@ void SerialEvent()
 void setup()
 {
 	COMMAND_PORT.begin(115200);
+	Serial.begin(115200);
 	// if (!InitEEPROM(&Kp, &Ki, &Kd))
 	// {
 	// 	Kp = KP;
@@ -181,14 +177,17 @@ void loop()
 		dt = dt * 0.001; //msec
 		oldMicros = currentMicros;
 
-		CalcuPID(dt, p, setpoint);
-		steering = PIDout;
+		if (p > 45 || p < -45)
+		{
+			steering = 0;
+		}
+		else
+		{
+			PID(dt, p, setpoint);
+			steering = PIDout;
+		}
 	}
 
-	if (p > 45 || p < -45)
-	{
-		steering = 0;
-	}
 	setMotorsSpeed(steering, steering);
 	SerialEvent();
 }

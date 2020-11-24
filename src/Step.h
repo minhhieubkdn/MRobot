@@ -9,9 +9,9 @@
 //#define TIMER_FREQUENCY 2000000 //2Mhz
 //#define TIMER_PRESCALER 36
 //#define ZERO_SPEED  65535
-#define MAX_ACCEL 80
-#define MAX_SPEED 900          // mm/s
-//#define REVERSE_MOTORS_DIRECTION // reverse both motors direction
+#define MAX_ACCEL 100
+#define MAX_SPEED 800          // mm/s
+#define REVERSE_MOTORS_DIRECTION // reverse both motors direction
 
 #define RAD2GRAD 57.2957795
 #define GRAD2RAD 0.01745329251994329576923690768489
