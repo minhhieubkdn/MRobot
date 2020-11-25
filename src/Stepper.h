@@ -9,9 +9,6 @@
 #define MAX_SPEED 800          // mm/s
 //#define REVERSE_MOTORS_DIRECTION // reverse both motors direction
 
-#define RAD2GRAD 57.2957795
-#define GRAD2RAD 0.01745329251994329576923690768489
-
 #define SPEED_TO_PERIOD(x) (1000000.0 / (STEP_PER_MM * x))
 
 #define COMPARE_VALUE_TIMER OCR1A
