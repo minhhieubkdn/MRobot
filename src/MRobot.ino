@@ -6,8 +6,8 @@
 
 #define KP 50
 #define KI 1.5
-#define KD 0
-#define NOISE 2 //+-2mm/s
+#define KD 0.08
+#define NOISE 1.5 //+-2mm/s
 #define COMMAND_PORT Serial1
 
 bool isStringCompleted = false;
