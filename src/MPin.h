@@ -6,11 +6,18 @@
 #define R_DIRECTION  PA5
 #define R_STEP       PA4
 
-#define MPU_INT      PA7
+#define ENA 3
+#define IN1 4
+#define IN2 8
+#define IN3 5
+#define IN4 7
+#define ENB 6
 
-#define BLINK_LED    PC13
+#define MPU_INT 2
+
+#define BLINK_LED    13
 #define L_LED        PB1
 #define R_LED        PB4
 
-#define BATTERRY_PIN PA0
-#define BLT          Serial1
+#define BATTERRY_PIN A0
+#define BLT          Serial
