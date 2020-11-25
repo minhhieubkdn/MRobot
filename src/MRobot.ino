@@ -1,8 +1,7 @@
 #include <Arduino.h>
 #include "MPin.h"
-#include "MEEPROM.h"
 #include "MMPU6050.h"
-#include "Step.h"
+#include "Motor.h"
 
 #define KP 20
 #define KI 1
@@ -58,11 +57,6 @@ float CalcuPID(float dt_, float error_, float set_point_)
 
 float PID(float _dt, float _feedback, float _setpoint)
 {
-	// if ((_feedback - _setpoint) <= 0.01 && (_setpoint - _feedback) <= 0.01)
-	// {
-	// 	PIDout = 0;
-	// 	return PIDout;
-	// }
 	error = _setpoint - _feedback;
 	alpha = 2 * dt * Kp + Ki * dt * dt + 2 * Kd;
 	beta = Ki * dt * dt - 4 * Kd - 2 * dt * Kp;
@@ -145,11 +139,6 @@ void SerialEvent()
 		COMMAND_PORT.println(setpoint);
 		COMMAND_PORT.println("Ok");
 	}
-	else if (messageBuffer == "SA")
-	{
-		SaveData(&Kp, &Ki, &Kd);
-		COMMAND_PORT.println("Ok");
-	}
 	inputString = "";
 	isStringCompleted = false;
 }
@@ -166,8 +155,6 @@ void setup()
 	InitMPU();
 	InitMotors();
 
-	setLeftMotorSpeed(0);
-	setRightMotorSpeed(0);
 
 	oldMicros = micros();
 }
@@ -189,6 +176,6 @@ void loop()
 	{
 		steering = 0;
 	}
-	setMotorsSpeed(steering, steering);
+	SetMotorsSpeed(steering, steering);
 	SerialEvent();
 }
