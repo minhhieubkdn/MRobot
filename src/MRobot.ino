@@ -1,14 +1,13 @@
-#include <Arduino.h>
 #include "MPin.h"
 #include "MEEPROM.h"
 #include "MMPU6050.h"
-#include "Step.h"
+#include "Stepper.h"
 
 #define KP 20
-#define KI 1
+#define KI 0
 #define KD 0
-#define NOISE 2 //+-2mm/s
-#define COMMAND_PORT Serial1
+#define NOISE 1 //+-2mm/s
+#define COMMAND_PORT Serial
 
 bool isStringCompleted = false;
 String inputString;
@@ -58,11 +57,6 @@ float CalcuPID(float dt_, float error_, float set_point_)
 
 float PID(float _dt, float _feedback, float _setpoint)
 {
-	// if ((_feedback - _setpoint) <= 0.01 && (_setpoint - _feedback) <= 0.01)
-	// {
-	// 	PIDout = 0;
-	// 	return PIDout;
-	// }
 	error = _setpoint - _feedback;
 	alpha = 2 * dt * Kp + Ki * dt * dt + 2 * Kd;
 	beta = Ki * dt * dt - 4 * Kd - 2 * dt * Kp;
@@ -145,11 +139,6 @@ void SerialEvent()
 		COMMAND_PORT.println(setpoint);
 		COMMAND_PORT.println("Ok");
 	}
-	else if (messageBuffer == "SA")
-	{
-		SaveData(&Kp, &Ki, &Kd);
-		COMMAND_PORT.println("Ok");
-	}
 	inputString = "";
 	isStringCompleted = false;
 }
@@ -157,18 +146,9 @@ void SerialEvent()
 void setup()
 {
 	COMMAND_PORT.begin(115200);
-	// if (!InitEEPROM(&Kp, &Ki, &Kd))
-	// {
-	// 	Kp = KP;
-	// 	Ki = KI;
-	// 	Kd = KD;
-	// }
 	InitMPU();
 	InitMotors();
-
-	setLeftMotorSpeed(0);
-	setRightMotorSpeed(0);
-
+	setMotorsSpeed(0, 0);
 	oldMicros = micros();
 }
 
@@ -181,7 +161,7 @@ void loop()
 		dt = dt * 0.001; //msec
 		oldMicros = currentMicros;
 
-		CalcuPID(dt, p, setpoint);
+		PID(dt, p, setpoint);
 		steering = PIDout;
 	}
 
