@@ -28,7 +28,7 @@
 #define R_DIR_OFF CLR(PORTB, 1)
 
 int16_t leftMotorSpeed, rightMotorSpeed; // Actual speed of motors
-int8_t leftMotorDir, rightMotorDir;      // Actual direction of steppers motors
+int leftMotorDir, rightMotorDir;      // Actual direction of steppers motors
 
 int16_t lCounter, rCounter;
 int16_t lDesiredCounter, rDesiredCounter;
@@ -79,20 +79,22 @@ void setMotorsSpeed(int16_t _lSpeed, int16_t _rSpeed)
   }
   else if (leftMotorSpeed > 0)
   {
+    lDesiredCounter = SPEED_TO_PERIOD(leftMotorSpeed)/10;
     leftMotorDir = 1;
 #ifndef REVERSE_MOTORS_DIRECTION
-    L_DIR_ON;
+    PORTD &= 0b01111111;
 #else
-    L_DIR_OFF;
+    PORTD |= 0b10000000;
 #endif
   }
   else
   {
+    lDesiredCounter = -SPEED_TO_PERIOD(leftMotorSpeed)/10;
     leftMotorDir = -1;
 #ifndef REVERSE_MOTORS_DIRECTION
-    L_DIR_OFF;
+    PORTD |= 0b10000000;
 #else
-    L_DIR_ON;
+    PORTD &= 0b01111111;
 #endif
   }
 
@@ -118,25 +120,27 @@ void setMotorsSpeed(int16_t _lSpeed, int16_t _rSpeed)
   }
   else if (rightMotorSpeed > 0)
   {
+    rDesiredCounter = SPEED_TO_PERIOD(rightMotorSpeed)/10;
     rightMotorDir = 1;
 #ifndef REVERSE_MOTORS_DIRECTION
-    R_DIR_ON;
+    PORTB |= 0b00000001;
 #else
-    R_DIR_OFF;
+    PORTB &= 0b11111110;
 #endif
   }
   else
   {
+    rDesiredCounter = -SPEED_TO_PERIOD(rightMotorSpeed)/10;
     rightMotorDir = -1;
 #ifndef REVERSE_MOTORS_DIRECTION
-    R_DIR_OFF;
+    PORTB &= 0b11111110;
 #else
-    R_DIR_ON;
+    PORTB |= 0b00000001;
 #endif
   }
 
-  lDesiredCounter = SPEED_TO_PERIOD(leftMotorSpeed)/10;
-  rDesiredCounter = SPEED_TO_PERIOD(rightMotorSpeed)/10;
+  
+  
 }
 
 void TimerInit()
@@ -188,7 +192,7 @@ void InitMotors()
   digitalWrite(L_ENABLE, LOW); // Enable motors
 
   TimerInit();
-  setMicrosCycle(10);
+  setMicrosCycle(20);
   TurnOnTimer1;
 }
 

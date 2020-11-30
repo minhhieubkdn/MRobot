@@ -36,7 +36,7 @@ void InitMPU()
 {
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
     Wire.begin();
-    Wire.setClock(400000);
+    TWBR = 24; // 400kHz I2C clock (200kHz if CPU is 8MHz)
 #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
     Fastwire::setup(400, true);
 #endif
@@ -51,15 +51,15 @@ void InitMPU()
     delay(2000);
     devStatus = mpu.dmpInitialize();
 
-    mpu.setXGyroOffset(220);
-    mpu.setYGyroOffset(76);
-    mpu.setZGyroOffset(-85);
-    mpu.setZAccelOffset(1788);
+    //mpu.setXGyroOffset(220);
+    //mpu.setYGyroOffset(76);
+    //mpu.setZGyroOffset(-85);
+    //mpu.setZAccelOffset(1788);
 
     if (devStatus == 0)
     {
         mpu.setDMPEnabled(true);
-        attachInterrupt(MPU_INT, dmpDataReady, RISING);
+        attachInterrupt(0, dmpDataReady, RISING);
         mpuIntStatus = mpu.getIntStatus();
         dmpReady = true;
         packetSize = mpu.dmpGetFIFOPacketSize();
@@ -69,7 +69,7 @@ void InitMPU()
         Serial.println("Not read MPU6050");
     }
 
-    delay(5000);
+    delay(10000);
     Serial.println(mpu.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
 }
 

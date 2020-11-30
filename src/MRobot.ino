@@ -20,7 +20,7 @@ float alpha, beta, gama;
 float Kp = KP, Ki = KI, Kd = KD;
 float PIDout = 0, lastPIDout = 0;
 float steering = 0;
-float setpoint = -3.1;
+float setpoint = -68;
 
 float angle_adjusted;
 float angle_adjusted_Old;
@@ -116,9 +116,9 @@ void SerialEvent()
 		float _sp = inputString.substring(3).toFloat();
 		if (_sp == 0)
 		{
-			ReadGyroValue(&y, &p, &r);
-			setpoint = p;
-			COMMAND_PORT.println(p);
+			//ReadGyroValue(&y, &p, &r);
+			setpoint = y;
+			COMMAND_PORT.println(y);
 			COMMAND_PORT.println("Ok");
 		}
 		else
@@ -145,7 +145,7 @@ void SerialEvent()
 
 void setup()
 {
-	COMMAND_PORT.begin(115200);
+	COMMAND_PORT.begin(9600);
 	InitMPU();
 	InitMotors();
 	setMotorsSpeed(0, 0);
@@ -154,21 +154,20 @@ void setup()
 
 void loop()
 {
-	if (ReadGyroValue(&y, &p, &r) != -1)
+	if (ReadGyroValue(&y, &p, &r) == 1)
 	{
 		currentMicros = micros();
 		dt = currentMicros - oldMicros;
 		dt = dt * 0.001; //msec
 		oldMicros = currentMicros;
-
-		PID(dt, p, setpoint);
+  		//Serial.println(y);
+		PID(dt, y, setpoint);
 		steering = PIDout;
+    
+  		//Serial.println(PIDout);
 	}
 
-	if (p > 45 || p < -45)
-	{
-		steering = 0;
-	}
+	
 	setMotorsSpeed(steering, steering);
 	SerialEvent();
 }
