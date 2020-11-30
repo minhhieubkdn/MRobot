@@ -4,7 +4,8 @@
 #include "MMPU6050.h"
 #include "Step.h"
 
-#define DEBUG 3
+#define DEBUG 4
+#define PID_TUNING_MODE
 
 #define KP 5
 #define KI 0
@@ -15,7 +16,7 @@
 #define KDD 0
 
 #define PULSE2DISTANCE 0.01715 // cm/us
-#define NOISE 0.5				   //+- mm/s
+#define NOISE 0.5			   //+- mm/s
 #define DEBUG_PORT Serial
 #define COMMAND_PORT Serial1
 
@@ -54,23 +55,29 @@ uint32_t checkObstacleTimer;
 uint8_t obstacleNum = 0;
 long duration, distance;
 
-float I_mem,error_old;
+float I_mem, error_old;
 
-float CalcuPID(float dt_, float error_, float set_point_) {
+float CalcuPID(float dt_, float error_, float set_point_)
+{
 	float pid_out_, error;
 
 	error = error_ - set_point_;
 	I_mem += error * Ki;
-	if (I_mem > MAX_SPEED) I_mem = MAX_SPEED;
-	else if (I_mem < -MAX_SPEED) I_mem = -MAX_SPEED;
+	if (I_mem > MAX_SPEED)
+		I_mem = MAX_SPEED;
+	else if (I_mem < -MAX_SPEED)
+		I_mem = -MAX_SPEED;
 	pid_out_ = Kp * error + I_mem * dt_ + Kd * (error - error_old) / dt_;
 
 	error_old = error;
 
-	if (pid_out_ > MAX_SPEED) pid_out_ = MAX_SPEED;
-	else if (pid_out_ < -MAX_SPEED) pid_out_ = -MAX_SPEED;
+	if (pid_out_ > MAX_SPEED)
+		pid_out_ = MAX_SPEED;
+	else if (pid_out_ < -MAX_SPEED)
+		pid_out_ = -MAX_SPEED;
 
-	if (pid_out_ < 1 && pid_out_ > -1) pid_out_ = 0;
+	if (pid_out_ < 1 && pid_out_ > -1)
+		pid_out_ = 0;
 
 	return pid_out_;
 }
@@ -259,12 +266,12 @@ void loop()
 
 		lMotorSpeed = speedOut + dirOut + steering;
 		rMotorSpeed = speedOut - dirOut + steering;
-#if DEBUG == 3		
+#if DEBUG == 3
 		DEBUG_PORT.print("LeftSpeed: ");
 		DEBUG_PORT.println(lMotorSpeed);
 #endif
 		setMotorsSpeed(lMotorSpeed, rMotorSpeed);
-
+#ifndef PID_TUNING_MODE
 		if (isWaitingFor10Secs && (currentMicros - beginMicros > 10000000))
 		{
 			checkObstacleTimer = currentMicros;
@@ -297,5 +304,6 @@ void loop()
 				}
 			}
 		}
+#endif
 	}
 }
