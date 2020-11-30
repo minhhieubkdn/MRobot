@@ -8,6 +8,9 @@
 
 #define MPU_INT      PA7
 
+#define TRIG         PA15
+#define ECHO         PB3
+
 #define BLINK_LED    PC13
 #define L_LED        PB1
 #define R_LED        PB4

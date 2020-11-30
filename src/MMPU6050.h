@@ -36,12 +36,8 @@ void dmpDataReady()
 
 void InitMPU()
 {
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
     Wire.begin();
     Wire.setClock(400000);
-#elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-    Fastwire::setup(400, true);
-#endif
     //mpu.initialize();
     mpu.setClockSource(MPU6050_CLOCK_PLL_ZGYRO);
     mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_2000);
@@ -75,22 +71,22 @@ void InitMPU()
     Serial.println(mpu.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
 }
 
-float ReadGyroValue(float *yaw, float *pitch, float *roll)
+bool ReadGyroValue(float *yaw, float *pitch, float *roll)
 {
     if (!dmpReady)
-        return -1;
+        return false;
 
     if (!mpuInterrupt && fifoCount < packetSize)
-        return -1;
+        return false;
 
     mpuInterrupt = false;
     mpuIntStatus = mpu.getIntStatus();
-
     fifoCount = mpu.getFIFOCount();
 
     if ((mpuIntStatus & 0x10) || fifoCount == 1024)
     {
         mpu.resetFIFO();
+        return false;
     }
     else if (mpuIntStatus & 0x02)
     {
@@ -135,26 +131,39 @@ float ReadGyroValue(float *yaw, float *pitch, float *roll)
         mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
 #endif
     }
-    return 1;
+    return true;
 }
 
 void DmpSetSensorFusionAccelGain(uint8_t gain)
 {
-  // INV_KEY_0_96
-  mpu.setMemoryBank(0);
-  mpu.setMemoryStartAddress(0x60);
-  mpu.writeMemoryByte(0);
-  mpu.writeMemoryByte(gain);
-  mpu.writeMemoryByte(0);
-  mpu.writeMemoryByte(0);
+    // INV_KEY_0_96
+    mpu.setMemoryBank(0);
+    mpu.setMemoryStartAddress(0x60);
+    mpu.writeMemoryByte(0);
+    mpu.writeMemoryByte(gain);
+    mpu.writeMemoryByte(0);
+    mpu.writeMemoryByte(0);
 }
 
-// Quick calculation to obtein Phi angle from quaternion solution
-float dmpGetPhi() {
-   mpu.getFIFOBytes(fifoBuffer, 16); // We only read the quaternion
-   mpu.dmpGetQuaternion(&q, fifoBuffer); 
-   mpu.resetFIFO();  // We always reset FIFO
-    
-   //return( asin(-2*(q.x * q.z - q.w * q.y)) * 180/M_PI); //roll
-   return (atan2(2*(q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z)* RAD2GRAD);
+float dmpGetTheta()
+{
+    mpu.getFIFOBytes(fifoBuffer, 16); // We only read the quaternion
+    mpu.dmpGetQuaternion(&q, fifoBuffer);
+    //mpu.resetFIFO(); // We always reset FIFO
+
+    return( asin(-2*(q.x * q.z - q.w * q.y)) * RAD2GRAD);
+    //return (atan2(2 * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z) * RAD2GRAD);1
+    //return( asin(-2*(q.x * q.z - q.w * q.y)) * 180/M_PI); //roll
+
+    //yaw = atan2(2.0*(q.y*q.z + q.w*q.x), q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z);
+    //pitch = asin(-2.0*(q.x*q.z - q.w*q.y));
+    //roll = atan2(2.0*(q.x*q.y + q.w*q.z), q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z);
+}
+
+float dmpGetPsi()
+{
+    //mpu.getFIFOBytes(fifoBuffer, 16); // We only read the quaternion
+    //mpu.dmpGetQuaternion(&q, fifoBuffer);
+    mpu.resetFIFO(); // We always reset FIFO
+    return (atan2(2*(q.x*q.y + q.w*q.z), q.w*q.w + q.x*q.x - q.y*q.y - q.z*q.z) * RAD2GRAD);
 }

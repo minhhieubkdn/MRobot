@@ -6,9 +6,10 @@
 #include "fastio.h"
 
 #define STEP_PER_MM 15.67f //(200*16)/(65*pi)
-#define MAX_ACCEL 100
+#define MAX_ACCEL 400
 #define MAX_SPEED 800          // mm/s
-#define REVERSE_MOTORS_DIRECTION // reverse both motors direction
+#define MAX_STEERING 20
+//#define REVERSE_MOTORS_DIRECTION // reverse both motors direction
 
 #define RAD2GRAD 57.2957795
 #define GRAD2RAD 0.01745329251994329576923690768489
@@ -122,10 +123,8 @@ void setMotorsSpeed(int16_t _lSpeed, int16_t _rSpeed)
   {
     leftMotorSpeed = _lSpeed;
   }
-  if (leftMotorSpeed > MAX_SPEED)
-    leftMotorSpeed = MAX_SPEED;
-  else if (leftMotorSpeed < -MAX_SPEED)
-    leftMotorSpeed = -MAX_SPEED;
+
+  leftMotorSpeed = constrain(leftMotorSpeed, -MAX_SPEED, MAX_SPEED);
 
   _speedInStepPerSec = _lSpeed * STEP_PER_MM;
   if (_speedInStepPerSec == 0)
@@ -154,8 +153,6 @@ void setMotorsSpeed(int16_t _lSpeed, int16_t _rSpeed)
 #endif
   }
 
-  
-
   if ((rightMotorSpeed - _rSpeed) > MAX_ACCEL)
     rightMotorSpeed -= MAX_ACCEL;
   else if ((rightMotorSpeed - _rSpeed) < -MAX_ACCEL)
@@ -167,10 +164,7 @@ void setMotorsSpeed(int16_t _lSpeed, int16_t _rSpeed)
     rightMotorSpeed = _rSpeed;
   }
 
-  if (rightMotorSpeed > MAX_SPEED)
-    rightMotorSpeed = MAX_SPEED;
-  else if (rightMotorSpeed < -MAX_SPEED)
-    rightMotorSpeed = -MAX_SPEED;
+  rightMotorSpeed = constrain(rightMotorSpeed, -MAX_SPEED, MAX_SPEED);
 
   _speedInStepPerSec = rightMotorSpeed * STEP_PER_MM;
   if (_speedInStepPerSec == 0)
@@ -202,6 +196,7 @@ void setMotorsSpeed(int16_t _lSpeed, int16_t _rSpeed)
   Timer3.setPeriod(_rPeriod);
   Timer1.setPeriod(_lPeriod);
 }
+
 void setRightMotorSpeed(int16_t _speed)
 {
   long _timerPeriod;
