@@ -1,26 +1,30 @@
 #include <Arduino.h>
 #include "MPin.h"
-#include "MEEPROM.h"
 #include "MMPU6050.h"
 #include "Step.h"
 
 #define DEBUG 4
 #define PID_TUNING_MODE
 
-#define KP 5
-#define KI 0
-#define KD 0
+//angle to speed
+#define KP 0.55  //0.2
+#define KD 0.16 //26
 
-#define KPD 0.1
-#define KID 0
-#define KDD 0
+//desired speed to target angle
+#define KPD 0.015//0.0125//0.015 //0.01	//0.065
+#define KID 0.00007	 //0.00006 //0.05
 
-#define PULSE2DISTANCE 0.01715 // cm/us
-#define NOISE 0.5			   //+- mm/s
+#define NOISE 0.45 //+- mm/s
+
+#define ANGLE_OFFSET 3.2 //0.08
+#define MAX_TARGET_ANGLE 12
+#define MAX_PD_OUT 700
+
+#define STEERING 40
+#define MOVING_SPEED 150
+
 #define DEBUG_PORT Serial
 #define COMMAND_PORT Serial1
-
-#define BALANCE_ANGLE 0
 
 bool isStringCompleted = false;
 String inputString;
@@ -29,97 +33,31 @@ uint32_t oldMicros;
 uint32_t currentMicros;
 float dt;
 
-float sLastError, sSecondToLastError;
-float Kp = KP, Ki = KI, Kd = KD;
-float sPIDout = 0, sLastPIDout = 0;
-float speedOut, currentAngle;
+float Kp = KP, Kd = KD;
+float desiredSpeed, currentAngle, oldAngle, angleOffset = ANGLE_OFFSET;
 
-float dLastError, dSecondToLastError;
-float Kpd = KPD, Kid = KID, Kdd = KDD;
-float dPIDout = 0, dlastPIDout = 0;
+float Kpd = 0, Kid = 0;
 float dirOut = 0, currentDir;
 
-float targetAngle = BALANCE_ANGLE;
+float targetAngle = 0;
 float targetDir = 0;
 
 float lMotorSpeed, rMotorSpeed;
 float steering = 0;
 
-bool BATlow = false;
-float y, p, r;
-
+float PDout;
+bool isRotating = false;
 bool isWaitingFor10Secs = true;
 uint32_t beginMicros;
 
 uint32_t checkObstacleTimer;
+uint32_t nextObstacleDelay;
+uint32_t delayAfterRotate, delayBeforeRotate;
+bool waitingToBalacingState = false;
 uint8_t obstacleNum = 0;
-long duration, distance;
 
-float I_mem, error_old;
-
-float CalcuPID(float dt_, float error_, float set_point_)
-{
-	float pid_out_, error;
-
-	error = error_ - set_point_;
-	I_mem += error * Ki;
-	if (I_mem > MAX_SPEED)
-		I_mem = MAX_SPEED;
-	else if (I_mem < -MAX_SPEED)
-		I_mem = -MAX_SPEED;
-	pid_out_ = Kp * error + I_mem * dt_ + Kd * (error - error_old) / dt_;
-
-	error_old = error;
-
-	if (pid_out_ > MAX_SPEED)
-		pid_out_ = MAX_SPEED;
-	else if (pid_out_ < -MAX_SPEED)
-		pid_out_ = -MAX_SPEED;
-
-	if (pid_out_ < 1 && pid_out_ > -1)
-		pid_out_ = 0;
-
-	return pid_out_;
-}
-
-float speedPIDControl(float _dt, float _input, float _setpoint)
-{
-	float alpha, beta, gama, error, out;
-
-	error = _setpoint - _input;
-	alpha = 2 * dt * Kp + Ki * dt * dt + 2 * Kd;
-	beta = Ki * dt * dt - 4 * Kd - 2 * dt * Kp;
-	gama = 2 * Kd;
-	out = (alpha * error + beta * sLastError + gama * sSecondToLastError + 2 * dt * sLastPIDout) / (2 * dt);
-	sLastPIDout = out;
-	sSecondToLastError = sLastError;
-	sLastError = error;
-
-	out = constrain(out, -MAX_SPEED, MAX_SPEED);
-
-	if (out < NOISE && out > -NOISE)
-		out = 0;
-	return out;
-}
-
-float directionPIDControl(float _dt, float _input, float _setpoint)
-{
-	float alpha, beta, gama, error, out;
-	error = _setpoint - _input;
-	alpha = 2 * dt * Kpd + Kid * dt * dt + 2 * Kdd;
-	beta = Kid * dt * dt - 4 * Kdd - 2 * dt * Kpd;
-	gama = 2 * Kdd;
-	out = (alpha * error + beta * dLastError + gama * dSecondToLastError + 2 * dt * dlastPIDout) / (2 * dt);
-	dlastPIDout = out;
-	dSecondToLastError = dLastError;
-	dLastError = error;
-
-	out = constrain(out, -MAX_STEERING, MAX_STEERING);
-
-	if (out < NOISE && out > -NOISE)
-		out = 0;
-	return out;
-}
+uint16_t actualRobotSpeed, oldActualRobotSpeed;
+float estimatedSpeedFiltered;
 
 void SerialEvent()
 {
@@ -146,11 +84,6 @@ void SerialEvent()
 		Kp = inputString.substring(3).toFloat();
 		COMMAND_PORT.println("Ok");
 	}
-	else if (messageBuffer == "KI")
-	{
-		Ki = inputString.substring(3).toFloat();
-		COMMAND_PORT.println("Ok");
-	}
 	else if (messageBuffer == "KD")
 	{
 		Kd = inputString.substring(3).toFloat();
@@ -166,17 +99,12 @@ void SerialEvent()
 		Kid = inputString.substring(3).toFloat();
 		COMMAND_PORT.println("Ok");
 	}
-	else if (messageBuffer == "DD")
-	{
-		Kdd = inputString.substring(3).toFloat();
-		COMMAND_PORT.println("Ok");
-	}
 	else if (messageBuffer == "SA")
 	{
 		float _sp = inputString.substring(3).toFloat();
 		if (_sp == 0)
 		{
-			targetAngle = dmpGetTheta();
+			targetAngle = currentAngle;
 		}
 		else
 		{
@@ -185,18 +113,19 @@ void SerialEvent()
 		COMMAND_PORT.println(targetAngle);
 		COMMAND_PORT.println("Ok");
 	}
-	else if (messageBuffer == "SD")
+	else if (messageBuffer == "DS")
 	{
-		float _sp = inputString.substring(3).toFloat();
-		if (_sp == 0)
-		{
-			targetDir = dmpGetPsi();
-		}
-		else
-		{
-			targetDir = _sp;
-		}
-		COMMAND_PORT.println(targetDir);
+		desiredSpeed = inputString.substring(3).toFloat();
+		COMMAND_PORT.println("Ok");
+	}
+	else if (messageBuffer == "ST")
+	{
+		steering = inputString.substring(3).toFloat();
+		COMMAND_PORT.println("Ok");
+	}
+	else if (messageBuffer == "AO")
+	{
+		angleOffset = inputString.substring(3).toFloat();
 		COMMAND_PORT.println("Ok");
 	}
 	inputString = "";
@@ -208,19 +137,16 @@ void setup()
 	COMMAND_PORT.begin(115200);
 	DEBUG_PORT.begin(115200);
 
-	Kpd = Kid = Kpd = 0;
-	pinMode(TRIG, OUTPUT);
-	pinMode(ECHO, INPUT);
-	WRITE(TRIG, 0);
+	pinMode(SENSOR, INPUT);
 
 	InitMPU();
 	InitMotors();
 
-	setLeftMotorSpeed(0);
-	setRightMotorSpeed(0);
-
+	setMotorsSpeed(0, 0);
+	desiredSpeed = 0;
 	oldMicros = micros();
 	beginMicros = micros();
+	COMMAND_PORT.println("Begin");
 }
 
 void loop()
@@ -238,72 +164,124 @@ void loop()
 		}
 
 		dt = currentMicros - oldMicros;
-		dt = dt * 0.001; //msec
+		dt = dt * 0.000001f; //sec
 		oldMicros = currentMicros;
 
-		//currentAngle = 0.9 * currentAngle + 0.1 * dmpGetTheta();
-		currentAngle = dmpGetTheta();
+		oldAngle = currentAngle;
+		currentAngle = dmpGetTheta() - angleOffset;
+		//currentAngle = 0.99 * currentAngle + 0.01 * (dmpGetTheta() - angleOffset);
+
 		currentDir = dmpGetPsi();
 		currentDir = roundf(currentDir);
+
+		//COMMAND_PORT.println(currentAngle);
 
 #if DEBUG == 1
 		DEBUG_PORT.print("theta: ");
 		DEBUG_PORT.println(currentAngle);
-		DEBUG_PORT.print("psi: ");
-		DEBUG_PORT.println(currentDir);
 #endif
 
-		speedOut = CalcuPID(dt, currentAngle, targetAngle);
-		if (!isWaitingFor10Secs)
-			dirOut = directionPIDControl(dt, currentDir, targetDir);
+		oldActualRobotSpeed = actualRobotSpeed;
+		actualRobotSpeed = (leftMotorSpeed + rightMotorSpeed) / 2;
+
+		int16_t angularVelo = (currentAngle - oldAngle) * 25; //?????
+		int16_t estimatedSpeed = -oldActualRobotSpeed + angularVelo;
+		estimatedSpeedFiltered = estimatedSpeed * 0.9 + (float)estimatedSpeed * 0.1;
+
+		targetAngle = speedPIControl(dt, estimatedSpeedFiltered, desiredSpeed, Kpd, Kid);
+		targetAngle = constrain(targetAngle, -MAX_TARGET_ANGLE, MAX_TARGET_ANGLE);
 
 #if DEBUG == 2
-		DEBUG_PORT.print("speedOut: ");
-		DEBUG_PORT.println(speedOut);
-		DEBUG_PORT.print("dirOut: ");
-		DEBUG_PORT.println(dirOut);
+		DEBUG_PORT.print("currentAngle: ");
+		DEBUG_PORT.println(currentAngle);
+		DEBUG_PORT.print("targetAngle: ");
+		DEBUG_PORT.println(targetAngle);
 #endif
 
-		lMotorSpeed = speedOut + dirOut + steering;
-		rMotorSpeed = speedOut - dirOut + steering;
+		PDout += stabilityPDControl(dt, currentAngle, targetAngle, Kp, Kd);
+		PDout = constrain(PDout, -MAX_PD_OUT, MAX_PD_OUT);
+
+		if (PDout > -NOISE && PDout < NOISE)
+			PDout = 0;
 #if DEBUG == 3
-		DEBUG_PORT.print("LeftSpeed: ");
-		DEBUG_PORT.println(lMotorSpeed);
+		DEBUG_PORT.print("PDout: ");
+		DEBUG_PORT.println(PDout);
 #endif
+
+		lMotorSpeed = PDout - steering;
+		rMotorSpeed = PDout + steering;
+	}
+
+	if (currentAngle < 40 && currentAngle > -40)
+	{
 		setMotorsSpeed(lMotorSpeed, rMotorSpeed);
+	}
+	else
+	{
+		setMotorsSpeed(0, 0);
+		PID_errorSum = 0;
+	}
+
 #ifndef PID_TUNING_MODE
-		if (isWaitingFor10Secs && (currentMicros - beginMicros > 10000000))
+
+	if (isWaitingFor10Secs && (currentMicros - beginMicros > 10000000))
+	{
+		Kpd = KPD;
+		Kid = KID;
+		checkObstacleTimer = currentMicros;
+		isWaitingFor10Secs = false;
+		desiredSpeed = -MOVING_SPEED;
+
+		COMMAND_PORT.println("Start Moving!");
+		delayBeforeRotate = currentMicros;
+	}
+	if (currentDir > targetDir - 3 && currentDir < targetDir + 3)
+	{
+		isRotating = false;
+		steering = 0;
+		desiredSpeed = -MOVING_SPEED;
+		//delayAfterRotate = currentMicros;
+		//waitingToBalacingState = true;
+	}
+	// if (currentMicros - delayAfterRotate > 5000)
+	// {
+	// 	if (waitingToBalacingState)
+	// 	{
+	// 		waitingToBalacingState = false;
+	// 		desiredSpeed = -MOVING_SPEED;
+	// 	}
+	// }
+	if (!isWaitingFor10Secs && (currentMicros - checkObstacleTimer > 100000))
+	{
+		checkObstacleTimer = currentMicros;
+		if (currentMicros - delayBeforeRotate > 4000000)
 		{
-			checkObstacleTimer = currentMicros;
-			isWaitingFor10Secs = false;
-			//targetAngle += 2;
+			nextObstacleDelay = currentMicros;
 
-			DEBUG_PORT.println("Start Moving!");
-		}
+			if (isRotating)
+				return;
 
-		if (!isWaitingFor10Secs && currentMicros - checkObstacleTimer > 500000)
-		{
-			checkObstacleTimer = currentMicros;
-			WRITE(TRIG, 1);
-			delay_us(11);
-			WRITE(TRIG, 0);
-			duration = pulseIn(ECHO, HIGH, 5000);
-			distance = duration * PULSE2DISTANCE;
+			obstacleNum++;
 
-			if (distance > 5 && distance < 30)
+			COMMAND_PORT.println("Detected Obstacle!");
+			if (obstacleNum == 1)
 			{
-				obstacleNum++;
-				if (obstacleNum == 1)
-				{
-					targetDir += 90;
-				}
-				else if (obstacleNum == 2)
-				{
-					targetAngle = 0;
-					steering = 0;
-				}
+				isRotating = true;
+				steering = STEERING;
+				desiredSpeed = 0;
+				targetDir = currentDir - 180;
+				if (targetDir < -180)
+					targetDir += 360;
+			}
+			else if (obstacleNum == 2)
+			{
+				//Kid = 0;
+				//Kpd = 0;
+				steering = 0;
+				desiredSpeed = 0;
+				//COMMAND_PORT.println("Stop Moving!");
 			}
 		}
-#endif
 	}
+#endif
 }

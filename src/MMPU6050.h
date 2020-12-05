@@ -67,82 +67,8 @@ void InitMPU()
         Serial.println("Not read MPU6050");
     }
 
-    delay(5000);
+    delay(2000);
     Serial.println(mpu.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
-}
-
-bool ReadGyroValue(float *yaw, float *pitch, float *roll)
-{
-    if (!dmpReady)
-        return false;
-
-    if (!mpuInterrupt && fifoCount < packetSize)
-        return false;
-
-    mpuInterrupt = false;
-    mpuIntStatus = mpu.getIntStatus();
-    fifoCount = mpu.getFIFOCount();
-
-    if ((mpuIntStatus & 0x10) || fifoCount == 1024)
-    {
-        mpu.resetFIFO();
-        return false;
-    }
-    else if (mpuIntStatus & 0x02)
-    {
-        while (fifoCount < packetSize)
-            fifoCount = mpu.getFIFOCount();
-
-        mpu.getFIFOBytes(fifoBuffer, packetSize);
-
-        fifoCount -= packetSize;
-
-#ifdef OUTPUT_READABLE_QUATERNION
-        mpu.dmpGetQuaternion(&q, fifoBuffer);
-        return (atan2(2 * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z) * RAD2GRAD);
-#endif
-
-#ifdef OUTPUT_READABLE_EULER
-        mpu.dmpGetQuaternion(&q, fifoBuffer);
-        mpu.dmpGetEuler(euler, &q);
-#endif
-
-#ifdef OUTPUT_READABLE_YAWPITCHROLL
-        mpu.dmpGetQuaternion(&q, fifoBuffer);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-        *yaw = ypr[0] * 180 / M_PI;
-        *pitch = ypr[1] * 180 / M_PI;
-        *roll = ypr[2] * 180 / M_PI;
-#endif
-
-#ifdef OUTPUT_READABLE_REALACCEL
-        mpu.dmpGetQuaternion(&q, fifoBuffer);
-        mpu.dmpGetAccel(&aa, fifoBuffer);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-#endif
-
-#ifdef OUTPUT_READABLE_WORLDACCEL
-        mpu.dmpGetQuaternion(&q, fifoBuffer);
-        mpu.dmpGetAccel(&aa, fifoBuffer);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-        mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
-#endif
-    }
-    return true;
-}
-
-void DmpSetSensorFusionAccelGain(uint8_t gain)
-{
-    // INV_KEY_0_96
-    mpu.setMemoryBank(0);
-    mpu.setMemoryStartAddress(0x60);
-    mpu.writeMemoryByte(0);
-    mpu.writeMemoryByte(gain);
-    mpu.writeMemoryByte(0);
-    mpu.writeMemoryByte(0);
 }
 
 float dmpGetTheta()

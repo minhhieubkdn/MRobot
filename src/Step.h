@@ -1,15 +1,12 @@
-//
-//
-//
 #include <Arduino.h>
 #include "MPin.h"
 #include "fastio.h"
 
-#define STEP_PER_MM 15.67f //(200*16)/(65*pi)
-#define MAX_ACCEL 400
-#define MAX_SPEED 800          // mm/s
+#define STEP_PER_MM 15.433f      //(200*16)/(65*pi)
+#define MAX_ACCEL 200
+#define MAX_SPEED 700           // mm/s
 #define MAX_STEERING 20
-//#define REVERSE_MOTORS_DIRECTION // reverse both motors direction
+#define REVERSE_MOTORS_DIRECTION // reverse both motors direction
 
 #define RAD2GRAD 57.2957795
 #define GRAD2RAD 0.01745329251994329576923690768489
@@ -27,10 +24,6 @@ volatile int32_t rCurrentSteps;
 int16_t leftMotorSpeed, rightMotorSpeed; // Actual speed of motors
 int8_t leftMotorDir, rightMotorDir;      // Actual direction of steppers motors
 
-/**************************************************************************************/
-/************        Initialize the Timers and Registers         ******************/
-/**************************************************************************************/
-
 // PD controller implementation(Proportional, derivative). DT in seconds
 float stabilityPDControl(float DT, float input, float setPoint, float Kp, float Kd)
 {
@@ -38,10 +31,6 @@ float stabilityPDControl(float DT, float input, float setPoint, float Kp, float 
   float output;
 
   error = setPoint - input;
-
-  // Kd is implemented in two parts
-  //    The biggest one using only the input (sensor) part not the SetPoint input-input(t-1).
-  //    And the second using the setpoint to make it a bit more agressive   setPoint-setPoint(t-1)
   float Kd_setPoint = constrain((setPoint - setPointOld), -8, 8); // We limit the input part...
   output = Kp * error + (Kd * Kd_setPoint - Kd * (input - PID_errorOld)) / DT;
   //Serial.print(Kd*(error-PID_errorOld));Serial.print("\t");
@@ -60,8 +49,6 @@ float speedPIControl(float DT, int16_t input, int16_t setPoint, float Kp, float 
   error = setPoint - input;
   PID_errorSum += constrain(error, -ITERM_MAX_ERROR, ITERM_MAX_ERROR);
   PID_errorSum = constrain(PID_errorSum, -ITERM_MAX, ITERM_MAX);
-
-  //Serial.println(PID_errorSum);
 
   output = Kp * error + Ki * PID_errorSum * DT; // DT is in miliseconds...
   return (output);
@@ -199,7 +186,7 @@ void setMotorsSpeed(int16_t _lSpeed, int16_t _rSpeed)
 
 void setRightMotorSpeed(int16_t _speed)
 {
-  long _timerPeriod;
+  long _rTimerPeriod;
   int16_t _speedInStepsPerSec;
 
   if (_speed > MAX_SPEED)
@@ -221,12 +208,12 @@ void setRightMotorSpeed(int16_t _speed)
   _speedInStepsPerSec = rightMotorSpeed * STEP_PER_MM;
   if (_speedInStepsPerSec == 0)
   {
-    _timerPeriod = 10;
+    _rTimerPeriod = 10;
     rightMotorDir = 0;
   }
   else if (_speedInStepsPerSec > 0)
   {
-    _timerPeriod = 1000000 / _speedInStepsPerSec;
+    _rTimerPeriod = 1000000 / _speedInStepsPerSec;
     rightMotorDir = 1;
 #ifndef REVERSE_MOTORS_DIRECTION
     WRITE(R_DIRECTION, 1);
@@ -236,7 +223,7 @@ void setRightMotorSpeed(int16_t _speed)
   }
   else
   {
-    _timerPeriod = 1000000 / -_speedInStepsPerSec;
+    _rTimerPeriod = 1000000 / -_speedInStepsPerSec;
     rightMotorDir = -1;
 #ifndef REVERSE_MOTORS_DIRECTION
     WRITE(R_DIRECTION, 0);
@@ -244,16 +231,12 @@ void setRightMotorSpeed(int16_t _speed)
     WRITE(R_DIRECTION, 1);
 #endif
   }
-
-  //Timer3.pause();
-  Timer3.setPeriod(_timerPeriod);
-  //Timer3.refresh();
-  //Timer3.resume();
+  Timer3.setPeriod(_rTimerPeriod);
 }
 
 void setLeftMotorSpeed(int16_t _speed)
 {
-  long _timerOverFlowValue;
+  long _lTimerPeriod;
   int16_t _speedInStepPerSec;
 
   if ((leftMotorSpeed - _speed) > MAX_ACCEL)
@@ -272,12 +255,12 @@ void setLeftMotorSpeed(int16_t _speed)
   _speedInStepPerSec = _speed * STEP_PER_MM;
   if (_speedInStepPerSec == 0)
   {
-    _timerOverFlowValue = 10;
+    _lTimerPeriod = 10;
     leftMotorDir = 0; // stop motor
   }
   else if (_speedInStepPerSec > 0)
   {
-    _timerOverFlowValue = 1000000 / _speedInStepPerSec;
+    _lTimerPeriod = 1000000 / _speedInStepPerSec;
     leftMotorDir = 1;
 #ifndef REVERSE_MOTORS_DIRECTION
     WRITE(L_DIRECTION, 1);
@@ -287,7 +270,7 @@ void setLeftMotorSpeed(int16_t _speed)
   }
   else
   {
-    _timerOverFlowValue = 1000000 / -_speedInStepPerSec;
+    _lTimerPeriod = 1000000 / -_speedInStepPerSec;
     leftMotorDir = -1;
 #ifndef REVERSE_MOTORS_DIRECTION
     WRITE(L_DIRECTION, 0);
@@ -295,12 +278,7 @@ void setLeftMotorSpeed(int16_t _speed)
     WRITE(L_DIRECTION, 1);
 #endif
   }
-  //Timer1.pause();
-  Timer1.setPeriod(_timerOverFlowValue);
-  //Timer1.refresh();
-  //Timer1.resume();
-
-  //Serial.println(_timerOverFlowValue);
+  Timer1.setPeriod(_lTimerPeriod);
 }
 
 void InitMotors()
